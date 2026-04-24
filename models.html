@@ -1,0 +1,254 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans)}
+.page{padding:1.5rem 0}
+.header{margin-bottom:1.5rem}
+.header h1{font-size:20px;font-weight:500;color:var(--color-text-primary);margin-bottom:4px}
+.header p{font-size:13px;color:var(--color-text-secondary)}
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1.25rem;align-items:center}
+.chip{padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);color:var(--color-text-secondary);transition:all .15s}
+.chip.active{background:var(--color-background-primary);border-color:var(--color-border-primary);color:var(--color-text-primary)}
+.chip:hover{background:var(--color-background-secondary)}
+.toggle-row{display:flex;gap:8px;margin-bottom:1.5rem}
+.toggle-btn{flex:1;padding:8px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-tertiary);background:var(--color-background-secondary);color:var(--color-text-secondary);font-size:13px;cursor:pointer;transition:all .15s;font-family:var(--font-sans)}
+.toggle-btn.active{background:var(--color-background-primary);border-color:var(--color-border-primary);color:var(--color-text-primary);font-weight:500}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:1.5rem}
+.card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:14px;position:relative;overflow:hidden}
+.card.winner{border-color:#3266ad;border-width:1.5px}
+.card-badge{position:absolute;top:10px;right:10px;font-size:10px;font-weight:500;padding:2px 8px;border-radius:10px;background:#e6f1fb;color:#185fa5}
+.card-name{font-size:14px;font-weight:500;color:var(--color-text-primary);margin-bottom:2px}
+.card-size{font-size:11px;color:var(--color-text-secondary);margin-bottom:10px}
+.card-stat{margin-bottom:6px}
+.stat-label{font-size:11px;color:var(--color-text-secondary);margin-bottom:2px}
+.stat-value{font-size:18px;font-weight:500;color:var(--color-text-primary)}
+.stat-unit{font-size:11px;color:var(--color-text-secondary)}
+.bar-wrap{height:4px;background:var(--color-background-tertiary);border-radius:2px;margin-top:4px;overflow:hidden}
+.bar{height:4px;border-radius:2px;transition:width .4s ease}
+.section-label{font-size:11px;font-weight:500;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.chart-wrap{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:1rem;margin-bottom:1.25rem}
+.table-wrap{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;margin-bottom:1.25rem}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:var(--color-background-secondary);color:var(--color-text-secondary);font-weight:500;padding:8px 12px;text-align:left;border-bottom:0.5px solid var(--color-border-tertiary)}
+td{padding:8px 12px;border-bottom:0.5px solid var(--color-border-tertiary);color:var(--color-text-primary)}
+tr:last-child td{border-bottom:none}
+.td-model{font-weight:500}
+.pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500}
+.pill-fast{background:#eaf3de;color:#3b6d11}
+.pill-mid{background:#faeeda;color:#854f0b}
+.pill-slow{background:#fcebeb;color:#a32d2d}
+.pill-win{background:#e6f1fb;color:#185fa5}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--color-text-secondary);margin-bottom:10px}
+.leg-dot{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:4px;vertical-align:middle}
+.footnote{font-size:11px;color:var(--color-text-tertiary);margin-top:1rem;padding-top:1rem;border-top:0.5px solid var(--color-border-tertiary)}
+</style>
+<h2 class="sr-only">Local LLM performance comparison on M2 MacBook Air — Qwen3 4B, Gemma 4 E4B, DeepSeek-R1 7B, Gemma 4 E2B across 4K–32K token ranges</h2>
+<div class="page">
+  <div class="header">
+    <h1>Local LLM performance on M2 MacBook Air</h1>
+    <p>Ollama + Metal + Q4_K_M builds · Estimated timings for real-world use</p>
+  </div>
+
+  <div class="section-label">Token context size</div>
+  <div class="controls" id="ctxControls">
+    <button class="chip active" data-ctx="4096">4K tokens</button>
+    <button class="chip" data-ctx="8192">8K tokens</button>
+    <button class="chip" data-ctx="16384">16K tokens</button>
+    <button class="chip" data-ctx="32768">32K tokens</button>
+  </div>
+
+  <div class="section-label">Timing type</div>
+  <div class="toggle-row">
+    <button class="toggle-btn active" id="btnInput">Input processing</button>
+    <button class="toggle-btn" id="btnOutput">Output generation</button>
+    <button class="toggle-btn" id="btnReal">Real-world response</button>
+  </div>
+
+  <div class="cards" id="cardGrid"></div>
+
+  <div class="chart-wrap">
+    <div class="section-label">Time across context sizes</div>
+    <div class="legend" id="chartLegend"></div>
+    <div style="position:relative;width:100%;height:240px">
+      <canvas id="lineChart" role="img" aria-label="Line chart comparing response times of 4 models across 4K to 32K token contexts"></canvas>
+    </div>
+  </div>
+
+  <div class="section-label">Full comparison table</div>
+  <div class="table-wrap">
+    <table id="compTable">
+      <thead>
+        <tr>
+          <th>Model</th><th>Size</th><th>4K ctx</th><th>8K ctx</th><th>16K ctx</th><th>32K ctx</th><th>Best use</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+
+  <div class="footnote">
+    Timings are estimates based on community benchmarks and Ollama documentation for Qwen3/Gemma4/DeepSeek-R1 on Apple Silicon M2 (8–16GB unified memory). Actual speeds vary by RAM config, thermal state, and prompt structure. DeepSeek-R1 includes chain-of-thought thinking overhead.
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const models = [
+  {
+    name:'Qwen3 4B', short:'Qwen3', size:'2.5 GB', ctx_max:'32K native / 131K YaRN',
+    color:'#3266ad', dotted:false,
+    badge:'Recommended',
+    use:'Daily assistant, Hinglish rewriting, coding, prompts',
+    input: {4096:10,8192:18,16384:32,32768:60},
+    output: {4096:90,8192:120,16384:175,32768:280},
+    real:  {4096:22,8192:35,16384:55,32768:90}
+  },
+  {
+    name:'Gemma 4 E4B', short:'Gemma E4B', size:'9.6 GB', ctx_max:'128K (Ollama)',
+    color:'#e8830a', dotted:false,
+    badge:'Multimodal',
+    use:'Image + text tasks, multimodal experiments',
+    input: {4096:20,8192:38,16384:65,32768:120},
+    output: {4096:240,8192:320,16384:450,32768:700},
+    real:  {4096:45,8192:75,16384:110,32768:180}
+  },
+  {
+    name:'DeepSeek-R1 7B', short:'DeepSeek', size:'4.7 GB', ctx_max:'128K (Ollama)',
+    color:'#7b50b8', dotted:false,
+    badge:'Reasoning',
+    use:'Math, logic, coding, step-by-step reasoning',
+    input: {4096:25,8192:50,16384:90,32768:180},
+    output: {4096:300,8192:400,16384:560,32768:900},
+    real:  {4096:60,8192:100,16384:155,32768:260}
+  },
+  {
+    name:'Gemma 4 E2B', short:'Gemma E2B', size:'~1.5 GB', ctx_max:'128K (Ollama)',
+    color:'#1d9e75', dotted:false,
+    badge:'Lightest',
+    use:'Ultra-light, edge/browser, basic tasks',
+    input: {4096:8,8192:14,16384:25,32768:50},
+    output: {4096:70,8192:95,16384:140,32768:230},
+    real:  {4096:18,8192:28,16384:42,32768:72}
+  }
+];
+
+const ctxKeys = [4096,8192,16384,32768];
+const ctxLabels = ['4K','8K','16K','32K'];
+let currentCtx = 4096;
+let currentMode = 'real';
+
+function fmtTime(sec){
+  if(sec<60) return Math.round(sec)+'s';
+  const m=Math.floor(sec/60), s=Math.round(sec%60);
+  return s>0?m+'m '+s+'s':m+'m';
+}
+
+function speedPill(sec){
+  if(sec<=30) return '<span class="pill pill-fast">Fast</span>';
+  if(sec<=90) return '<span class="pill pill-mid">Moderate</span>';
+  return '<span class="pill pill-slow">Slow</span>';
+}
+
+function getModeData(m,ctx){
+  if(currentMode==='input') return m.input[ctx];
+  if(currentMode==='output') return m.output[ctx];
+  return m.real[ctx];
+}
+
+function getModeLabel(){
+  if(currentMode==='input') return 'Input processing time';
+  if(currentMode==='output') return '4K output generation time';
+  return 'Normal response time (~300–800 tok output)';
+}
+
+function renderCards(){
+  const grid = document.getElementById('cardGrid');
+  const maxVal = Math.max(...models.map(m=>getModeData(m,currentCtx)));
+  grid.innerHTML = models.map((m,i)=>{
+    const val = getModeData(m,currentCtx);
+    const pct = Math.round((val/maxVal)*100);
+    const isWinner = val===Math.min(...models.map(x=>getModeData(x,currentCtx)));
+    return `<div class="card${isWinner?' winner':''}">
+      ${m.badge?`<span class="card-badge">${m.badge}</span>`:''}
+      <div class="card-name">${m.name}</div>
+      <div class="card-size">${m.size} on disk</div>
+      <div class="card-stat">
+        <div class="stat-label">${getModeLabel()}</div>
+        <div><span class="stat-value">${fmtTime(val)}</span></div>
+      </div>
+      <div class="bar-wrap"><div class="bar" style="width:${pct}%;background:${m.color}"></div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderTable(){
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = models.map(m=>{
+    const vals = ctxKeys.map(c=>{
+      const v=getModeData(m,c);
+      return `<td>${fmtTime(v)} ${speedPill(v)}</td>`;
+    }).join('');
+    return `<tr>
+      <td class="td-model" style="color:${m.color};white-space:nowrap">${m.name}</td>
+      <td style="white-space:nowrap">${m.size}</td>
+      ${vals}
+      <td style="font-size:11px;color:var(--color-text-secondary);max-width:120px">${m.use}</td>
+    </tr>`;
+  }).join('');
+}
+
+let chart = null;
+function renderChart(){
+  const isDark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const gridColor = isDark?'rgba(255,255,255,.07)':'rgba(0,0,0,.06)';
+  const tickColor = isDark?'rgba(255,255,255,.4)':'rgba(0,0,0,.4)';
+  const legendEl = document.getElementById('chartLegend');
+  legendEl.innerHTML = models.map(m=>`<span><span class="leg-dot" style="background:${m.color}"></span>${m.name}</span>`).join('');
+  const datasets = models.map(m=>({
+    label:m.name,
+    data:ctxKeys.map(c=>getModeData(m,c)),
+    borderColor:m.color,
+    backgroundColor:m.color+'22',
+    pointBackgroundColor:m.color,
+    pointRadius:5,
+    pointHoverRadius:7,
+    tension:.35,
+    borderWidth:2,
+    fill:false
+  }));
+  if(chart){chart.destroy(); chart=null;}
+  chart = new Chart(document.getElementById('lineChart'),{
+    type:'line',
+    data:{labels:ctxLabels, datasets},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:(ctx)=>ctx.dataset.label+': '+fmtTime(ctx.raw)}}},
+      scales:{
+        x:{grid:{color:gridColor},ticks:{color:tickColor,font:{size:12}},title:{display:true,text:'Context size (tokens)',color:tickColor,font:{size:11}}},
+        y:{grid:{color:gridColor},ticks:{color:tickColor,font:{size:12},callback:(v)=>fmtTime(v)},title:{display:true,text:getModeLabel(),color:tickColor,font:{size:11}}}
+      }
+    }
+  });
+}
+
+function render(){renderCards();renderTable();renderChart();}
+render();
+
+document.getElementById('ctxControls').addEventListener('click',e=>{
+  const btn=e.target.closest('.chip');
+  if(!btn)return;
+  currentCtx=parseInt(btn.dataset.ctx);
+  document.querySelectorAll('.chip').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+});
+
+['btnInput','btnOutput','btnReal'].forEach(id=>{
+  document.getElementById(id).addEventListener('click',()=>{
+    currentMode={btnInput:'input',btnOutput:'output',btnReal:'real'}[id];
+    document.querySelectorAll('.toggle-btn').forEach(b=>b.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    render();
+  });
+});
+</script>

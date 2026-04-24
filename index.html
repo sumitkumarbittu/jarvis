@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voice Mac Control — Implementation Plan</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg1: #ffffff; --bg2: #f5f4ef; --bg-info: #e6f1fb; --bg-ok: #eaf3de;
+    --bg-warn: #faeeda; --bg-danger: #fcebeb;
+    --t1: #1a1a18; --t2: #73726c; --t3: #9c9a92;
+    --ti: #185fa5; --tok: #3b6d11; --tw: #854f0b; --td: #a32d2d;
+    --b3: rgba(0,0,0,0.12); --b2: rgba(0,0,0,0.22);
+    --bi: #b5d4f4; --bok: #c0dd97; --bw: #fac775; --bd: #f7c1c1;
+    --r: 8px; --rl: 12px;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "SF Mono", "Fira Code", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg1: #1e1e1c; --bg2: #2a2a28; --bg-info: #042c53; --bg-ok: #173404;
+      --bg-warn: #412402; --bg-danger: #501313;
+      --t1: #e8e6de; --t2: #a8a69e; --t3: #6e6c66;
+      --ti: #85b7eb; --tok: #97c459; --tw: #ef9f27; --td: #f09595;
+      --b3: rgba(255,255,255,0.1); --b2: rgba(255,255,255,0.2);
+      --bi: #0c447c; --bok: #27500a; --bw: #633806; --bd: #791f1f;
+    }
+  }
+  body { font-family: var(--sans); background: var(--bg2); color: var(--t1); padding: 28px 20px; min-height: 100vh; }
+  .wrap { max-width: 740px; margin: 0 auto; }
+  h1 { font-size: 19px; font-weight: 500; margin-bottom: 5px; }
+  .sub { font-size: 13px; color: var(--t2); margin-bottom: 18px; }
+
+  /* banner */
+  #banner { border: 0.5px solid var(--b3); border-radius: var(--rl); background: var(--bg1); padding: 14px 16px; margin-bottom: 14px; }
+  .brow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .blabel { font-size: 11px; font-weight: 500; color: var(--t3); text-transform: uppercase; letter-spacing: .05em; margin-right: 2px; }
+  .pill { display: inline-flex; align-items: center; font-size: 12px; font-weight: 500; padding: 3px 9px; border-radius: 999px; border: 0.5px solid; }
+  .pill.g { background: var(--bg-ok);   color: var(--tok); border-color: var(--bok); }
+  .pill.a { background: var(--bg-warn); color: var(--tw);  border-color: var(--bw); }
+  .pill.b { background: var(--bg-info); color: var(--ti);  border-color: var(--bi); }
+  .pill.r { background: var(--bg-danger); color: var(--td); border-color: var(--bd); }
+  .pill.x { background: var(--bg2); color: var(--t2); border-color: var(--b2); }
+
+  .mrec { margin-top: 12px; border-top: 0.5px solid var(--b3); padding-top: 12px; }
+  .mrec-title { font-size: 12px; font-weight: 500; color: var(--t2); margin-bottom: 8px; }
+  .mgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 7px; }
+  .mc { background: var(--bg2); border-radius: var(--r); padding: 8px 10px; }
+  .mc-l { font-size: 10px; font-weight: 500; color: var(--t3); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 3px; }
+  .mc-v { font-size: 12px; font-weight: 500; color: var(--t1); font-family: var(--mono); }
+  .mc-n { font-size: 11px; color: var(--t2); margin-top: 2px; }
+
+  .ovr { margin-top: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .ovr label { font-size: 12px; color: var(--t2); }
+  .ovr select { font-size: 12px; padding: 4px 8px; border-radius: var(--r); border: 0.5px solid var(--b2); background: var(--bg2); color: var(--t1); font-family: var(--sans); cursor: pointer; }
+  .ovr select:focus { outline: none; border-color: var(--bi); }
+
+  .warnbox { background: var(--bg-warn); border: 0.5px solid var(--bw); border-radius: var(--r); padding: 8px 11px; font-size: 12px; color: var(--tw); margin-top: 9px; line-height: 1.5; }
+  .infobox { background: var(--bg-info); border: 0.5px solid var(--bi); border-radius: var(--r); padding: 8px 11px; font-size: 12px; color: var(--ti); margin-top: 9px; line-height: 1.5; }
+
+  /* phases */
+  .phase { border: 0.5px solid var(--b3); border-radius: var(--rl); background: var(--bg1); margin-bottom: 9px; overflow: hidden; }
+  .ph { display: flex; align-items: center; gap: 11px; padding: 12px 16px; cursor: pointer; user-select: none; }
+  .ph:hover { background: var(--bg2); }
+  .badge { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; font-size: 12px; font-weight: 500; flex-shrink: 0; }
+  .ptitle { font-size: 14px; font-weight: 500; flex: 1; }
+  .pmeta { font-size: 12px; color: var(--t2); }
+  .chev { transition: transform .2s; font-size: 11px; color: var(--t3); }
+  .pb { display: none; padding: 0 16px 14px; border-top: 0.5px solid var(--b3); }
+  .pb.open { display: block; }
+  .pb > p { font-size: 13px; color: var(--t2); margin: 10px 0 3px; line-height: 1.5; }
+
+  ul.sl { list-style: none; margin: 9px 0 0; padding: 0; }
+  ul.sl li { display: flex; gap: 9px; align-items: flex-start; padding: 7px 0; border-bottom: 0.5px solid var(--b3); font-size: 13px; }
+  ul.sl li:last-child { border-bottom: none; }
+  .sn { font-size: 11px; font-weight: 500; color: var(--t3); min-width: 15px; padding-top: 1px; }
+  .sc { flex: 1; }
+  .st { font-weight: 500; color: var(--t1); margin-bottom: 3px; }
+  .sd { color: var(--t2); line-height: 1.55; }
+
+  pre.cb {
+    background: var(--bg2); border-radius: var(--r);
+    padding: 8px 10px; font-family: var(--mono); font-size: 11.5px;
+    color: var(--t2); margin-top: 7px; white-space: pre; overflow-x: auto; line-height: 1.6;
+  }
+  .tok { color: var(--ti); font-weight: 500; }
+
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 0.5px solid; }
+  .tb { background: var(--bg-info); color: var(--ti); border-color: var(--bi); }
+  .tg { background: var(--bg-ok);   color: var(--tok); border-color: var(--bok); }
+  .ta { background: var(--bg-warn); color: var(--tw);  border-color: var(--bw); }
+  .tx { background: var(--bg2); color: var(--t2); border-color: var(--b2); }
+
+  .sgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 8px; margin-top: 9px; }
+  .sc2 { background: var(--bg2); border-radius: var(--r); padding: 9px 11px; }
+  .sc2-l { font-size: 10px; font-weight: 500; color: var(--t3); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .sc2-v { font-size: 12px; color: var(--t1); line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Voice Mac Control — Implementation Plan</h1>
+  <p class="sub">Multi-agent macOS voice control · Docker + Gemma 4 + OODA loop + Ghost mode</p>
+
+  <!-- ── Device banner ── -->
+  <div id="banner">
+    <div class="brow">
+      <span class="blabel">Device</span>
+      <span id="p-os"    class="pill x">Detecting…</span>
+      <span id="p-ram"   class="pill x"></span>
+      <span id="p-cores" class="pill x"></span>
+      <span id="p-gpu"   class="pill x"></span>
+    </div>
+    <div class="mrec">
+      <div class="mrec-title">Recommended config for your device — all code blocks update live</div>
+      <div class="mgrid">
+        <div class="mc"><div class="mc-l">Ollama model</div><div class="mc-v" id="r-model">—</div><div class="mc-n" id="r-model-n"></div></div>
+        <div class="mc"><div class="mc-l">Context window</div><div class="mc-v" id="r-ctx">—</div><div class="mc-n" id="r-ctx-n"></div></div>
+        <div class="mc"><div class="mc-l">Whisper model</div><div class="mc-v" id="r-whi">—</div><div class="mc-n" id="r-whi-n"></div></div>
+        <div class="mc"><div class="mc-l">Vision tokens</div><div class="mc-v" id="r-vis">—</div><div class="mc-n" id="r-vis-n"></div></div>
+        <div class="mc"><div class="mc-l">CPU threads</div><div class="mc-v" id="r-thr">—</div><div class="mc-n" id="r-thr-n"></div></div>
+        <div class="mc"><div class="mc-l">Batch size</div><div class="mc-v" id="r-bat">—</div><div class="mc-n" id="r-bat-n"></div></div>
+      </div>
+      <div class="ovr">
+        <label for="man-ram">Override RAM tier:</label>
+        <select id="man-ram" onchange="manualOverride(this.value)">
+          <option value="">— auto detected —</option>
+          <option value="8">8 GB · base M-series</option>
+          <option value="16">16 GB · M2/M3/M4 Pro</option>
+          <option value="24">24 GB · M3/M4 Pro mid</option>
+          <option value="32">32 GB · M3/M4 Pro max</option>
+          <option value="48">48 GB · M4 Max</option>
+          <option value="64">64 GB+ · M3/M4 Ultra</option>
+        </select>
+      </div>
+    </div>
+    <div id="d-warn"  class="warnbox" style="display:none"></div>
+    <div id="d-info"  class="infobox" style="display:none"></div>
+  </div>
+
+  <!-- ── Phase 0 ── -->
+  <div class="phase">
+    <div class="ph" onclick="tog('b0','c0')">
+      <span class="badge" style="background:#E6F1FB;color:#185FA5">0</span>
+      <span class="ptitle">Prerequisites &amp; permissions</span>
+      <span class="pmeta">~30 min</span>
+      <span class="chev" id="c0">▼</span>
+    </div>
+    <div class="pb open" id="b0">
+      <p>Do this before writing any code — everything downstream silently breaks without it.</p>
+      <ul class="sl">
+        <li><span class="sn">1</span><div class="sc">
+          <div class="st">macOS permissions</div>
+          <div class="sd">System Settings → Privacy &amp; Security. Grant all four to Terminal + your Python binary: <strong>Accessibility</strong> (AX tree / UI control), <strong>Microphone</strong>, <strong>Screen Recording</strong>, <strong>Full Disk Access</strong>.</div>
+        </div></li>
+        <li><span class="sn">2</span><div class="sc">
+          <div class="st">Homebrew tools</div>
+          <pre class="cb">brew install ollama whisper-cpp
+brew install --cask hammerspoon docker</pre>
+        </div></li>
+        <li><span class="sn">3</span><div class="sc">
+          <div class="st">Pull recommended Ollama model</div>
+          <div class="sd">Detected for your device — see banner. Gemma 4 handles STT intent <em>and</em> screen vision in a single call; no separate vision model needed.</div>
+          <pre class="cb">ollama pull <span class="tok t-model">gemma4:e4b</span>
+ollama serve   # starts Metal GPU inference server</pre>
+        </div></li>
+        <li><span class="sn">4</span><div class="sc">
+          <div class="st">Python host environment</div>
+          <pre class="cb">python3 -m venv .venv && source .venv/bin/activate
+pip install pvporcupine pvrecorder pyaudio pyautogui \
+            websockets Pillow pyobjc-framework-Quartz</pre>
+        </div></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ── Phase 1 ── -->
+  <div class="phase">
+    <div class="ph" onclick="tog('b1','c1')">
+      <span class="badge" style="background:#EAF3DE;color:#3B6D11">1</span>
+      <span class="ptitle">Host bridge daemon</span>
+      <span class="pmeta">~2 hrs</span>
+      <span class="chev" id="c1">▼</span>
+    </div>
+    <div class="pb" id="b1">
+      <p>Lightweight Python daemon on macOS — never in Docker. Owns all hardware + OS access. Streams audio and screen to container; executes JSON action payloads back.</p>
+      <ul class="sl">
+        <li><span class="sn">1</span><div class="sc">
+          <div class="st">Audio capture</div>
+          <div class="sd">pvrecorder streams mic frames (16 kHz, 16-bit mono) over WebSocket to the container's <code>/transcribe</code> endpoint. Docker cannot touch the mic — this lives only on the host.</div>
+        </div></li>
+        <li><span class="sn">2</span><div class="sc">
+          <div class="st">Screen context</div>
+          <div class="sd">On each command cycle: screenshot via <code>Quartz.CGWindowListCreateImage</code>, resize to 1024×768 (sufficient for UI detection, saves vision tokens), send as base64 alongside transcript. Active app name + window title attached as metadata.</div>
+        </div></li>
+        <li><span class="sn">3</span><div class="sc">
+          <div class="st">Action executor — two strategies</div>
+          <pre class="cb">def execute(action):
+    v = action["verb"]
+    if v == "applescript":
+        subprocess.run(["osascript", "-e", action["script"]])
+    elif v == "click_ax":              # Strategy 1: AX tree (fast, no vision)
+        ax_click_by_label(action["label"], action.get("role","AXButton"))
+    elif v == "click_xy":              # Strategy 2: vision fallback (Electron/web)
+        pyautogui.moveTo(action["x"], action["y"], duration=0.08)
+        pyautogui.click()
+    elif v == "type":
+        pyautogui.typewrite(action["text"], interval=0.03)
+    elif v == "hammerspoon":
+        subprocess.run(["hs", "-c", action["lua"]])
+    elif v == "shell":
+        subprocess.run(action["cmd"], shell=True)</pre>
+        </div></li>
+      </ul>
+      <div class="tags">
+        <span class="tag tb">Python 3.12</span>
+        <span class="tag tx">pvrecorder</span>
+        <span class="tag tx">Quartz</span>
+        <span class="tag tx">pyautogui</span>
+        <span class="tag tx">websockets</span>
+        <span class="tag tx">AXUIElement</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Phase 2 ── -->
+  <div class="phase">
+    <div class="ph" onclick="tog('b2','c2')">
+      <span class="badge" style="background:#FAEEDA;color:#854F0B">2</span>
+      <span class="ptitle">Container brain — STT + intent agent</span>
+      <span class="pmeta">~3 hrs</span>
+      <span class="chev" id="c2">▼</span>
+    </div>
+    <div class="pb" id="b2">
+      <p>Docker handles all cognition. Calls Ollama at <code>host.docker.internal:11434</code> — Metal GPU stays on the host where macOS allows it. All tuning values injected as env vars.</p>
+      <ul class="sl">
+        <li><span class="sn">1</span><div class="sc">
+          <div class="st">Dockerfile</div>
+          <pre class="cb">FROM python:3.12-slim
+RUN pip install --no-cache-dir \
+    faster-whisper fastapi uvicorn websockets \
+    ollama httpx pillow
+COPY . /app
+WORKDIR /app
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "9000"]</pre>
+        </div></li>
+        <li><span class="sn">2</span><div class="sc">
+          <div class="st">STT — faster-whisper</div>
+          <div class="sd">Receives raw audio bytes, transcribes with device-tuned model size. Returns transcript + word-level confidence. Confidence directly feeds OODA Gate 1.</div>
+          <pre class="cb">from faster_whisper import WhisperModel
+model = WhisperModel(
+    os.environ["WHISPER_MODEL"],   # <span class="tok t-whi">base</span>
+    device="cpu",
+    compute_type="int8",
+    num_workers=<span class="tok t-thr">4</span>
+)</pre>
+        </div></li>
+        <li><span class="sn">3</span><div class="sc">
+          <div class="st">Gemma 4 intent + vision call</div>
+          <div class="sd">Single call: transcript + screenshot → structured action JSON via native function calling. No regex parsing. Vision token budget controls latency vs accuracy.</div>
+          <pre class="cb">response = ollama.chat(
+    model=os.environ["OLLAMA_MODEL"],    # <span class="tok t-model">gemma4:e4b</span>
+    messages=[{
+        "role":    "user",
+        "content": f"[App: {active_app}] {transcript}",
+        "images":  [b64_screenshot]
+    }],
+    options={
+        "num_ctx":     <span class="tok t-ctx">8192</span>,    # context window (tokens)
+        "num_thread":  <span class="tok t-thr">4</span>,       # CPU threads
+        "num_batch":   <span class="tok t-bat">256</span>,     # batch size
+        "temperature": 0.0,              # deterministic action output
+        "num_predict": 256,              # action JSON is always short
+    },
+    tools=[ACTION_SCHEMA]
+)</pre>
+        </div></li>
+        <li><span class="sn">4</span><div class="sc">
+          <div class="st">docker-compose.yml</div>
+          <div class="sd">All device-tuned values are injected as environment variables. Changing device tier means updating only this file — all downstream code reads from env.</div>
+          <pre class="cb">services:
+  ghost:
+    build: .
+    ports: ["9000:9000"]
+    volumes:
+      - ~/Documents:/data
+      - ./state:/app/state
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      OLLAMA_MODEL:  <span class="tok t-model">gemma4:e4b</span>
+      WHISPER_MODEL: <span class="tok t-whi">base</span>
+      CTX_WINDOW:    "<span class="tok t-ctx">8192</span>"
+      NUM_THREADS:   "<span class="tok t-thr">4</span>"
+      BATCH_SIZE:    "<span class="tok t-bat">256</span>"
+      VIS_TOKENS:    "<span class="tok t-vis">140</span>"</pre>
+        </div></li>
+      </ul>
+      <div class="tags">
+        <span class="tag ta">Gemma 4 · <span class="t-model">e4b</span></span>
+        <span class="tag tx">faster-whisper</span>
+        <span class="tag tx">Ollama Metal</span>
+        <span class="tag tx">FastAPI</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Phase 3 ── -->
+  <div class="phase">
+    <div class="ph" onclick="tog('b3','c3')">
+      <span class="badge" style="background:#EEEDFE;color:#534AB7">3</span>
+      <span class="ptitle">OODA loop + ghost mode</span>
+      <span class="pmeta">~4 hrs</span>
+      <span class="chev" id="c3">▼</span>
+    </div>
+    <div class="pb" id="b3">
+      <p>Decision layer. Ghost mode = silent by default. Surfaces only when all three gates pass — no interruption without value.</p>
+      <ul class="sl">
+        <li><span class="sn">1</span><div class="sc">
+          <div class="st">Observe</div>
+          <div class="sd">Receives rolling audio + screen from bridge. Maintains sliding window of last <code>CTX / 4</code> tokens of history — auto-sized to device context window.</div>
+        </div></li>
+        <li><span class="sn">2</span><div class="sc">
+          <div class="st">Orient</div>
+          <div class="sd">Gemma 4 call with full context. Returns intent + confidence 0–1. Below 0.85 → stay in loop. Active app injected as system prefix so context-dependent commands resolve correctly.</div>
+        </div></li>
+        <li><span class="sn">3</span><div class="sc">
+          <div class="st">Decide — 3 serial gates</div>
+          <pre class="cb">SILENT_TASKS = {"file_index","file_read","context_update"}
+
+def should_surface(intent) -> bool:
+    if intent["confidence"] < 0.85:           # Gate 1: confidence
+        return False
+    if not intent.get("urgent") and \
+       intent["task_type"] in SILENT_TASKS:   # Gate 2: urgency
+        return False
+    if not verifier.check(intent):            # Gate 3: completeness
+        queue_for_human_review(intent)
+        return False
+    return True</pre>
+        </div></li>
+        <li><span class="sn">4</span><div class="sc">
+          <div class="st">Act</div>
+          <div class="sd">Sends JSON action to host bridge. Writes result to lossless event log (append-only JSONL with model name + ctx_used). Publishes to <code>/artifacts</code> only when gates pass.</div>
+        </div></li>
+        <li><span class="sn">5</span><div class="sc">
+          <div class="st">Implicit fast-path</div>
+          <div class="sd">Patterns executed successfully ≥3 times skip all gates: Orient → Act directly. Stored in <code>state/learned_patterns.json</code>. First execution always runs all three gates.</div>
+        </div></li>
+      </ul>
+      <div class="tags">
+        <span class="tag tb">OODA</span>
+        <span class="tag tb">Ghost mode</span>
+        <span class="tag tx">Confidence ≥ 0.85</span>
+        <span class="tag tx">Append-only JSONL</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Phase 4 ── -->
+  <div class="phase">
+    <div class="ph" onclick="tog('b4','c4')">
+      <span class="badge" style="background:#E1F5EE;color:#0F6E56">4</span>
+      <span class="ptitle">Wake word + manual verifier</span>
+      <span class="pmeta">~2 hrs</span>
+      <span class="chev" id="c4">▼</span>
+    </div>
+    <div class="pb" id="b4">
+      <ul class="sl">
+        <li><span class="sn">1</span><div class="sc">
+          <div class="st">Wake word — two options</div>
+          <div class="sd"><strong>Option A (start here):</strong> Hammerspoon global hotkey (⌥Space) — zero latency, zero CPU, zero ML. <strong>Option B:</strong> Porcupine free tier — one custom keyword, ~1% CPU, 20–40 ms detection.</div>
+          <pre class="cb">pip install pvporcupine pvrecorder
+
+-- Hammerspoon init.lua (Option A)
+hs.hotkey.bind({"alt"}, "space", function()
+  hs.urlevent.openURL("ghost://listen")
+end)</pre>
+        </div></li>
+        <li><span class="sn">2</span><div class="sc">
+          <div class="st">Manual verifier UI</div>
+          <div class="sd">Triggers when STT confidence is 0.70–0.84. Fires a macOS notification with action buttons: <em>"Did you say: open Spotify?"</em> — Yes / No / Retry. Yes bypasses retranscription. Retry re-runs the audio segment through Whisper <span class="tok t-whi">base</span>.</div>
+        </div></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ── Phase 5 ── -->
+  <div class="phase">
+    <div class="ph" onclick="tog('b5','c5')">
+      <span class="badge" style="background:#FAECE7;color:#993C1D">5</span>
+      <span class="ptitle">File agent + lossless state</span>
+      <span class="pmeta">~2 hrs</span>
+      <span class="chev" id="c5">▼</span>
+    </div>
+    <div class="pb" id="b5">
+      <ul class="sl">
+        <li><span class="sn">1</span><div class="sc">
+          <div class="st">File agent</div>
+          <div class="sd">Read / write / diff / index on <code>/data</code> (→ <code>~/Documents</code>). SQLite FTS5 index on filename + first 512 chars of content. "Open my Q3 report" does full-text search — no exact path needed.</div>
+        </div></li>
+        <li><span class="sn">2</span><div class="sc">
+          <div class="st">Lossless event log</div>
+          <div class="sd">Append-only JSONL at <code>/app/state/events.jsonl</code>. Every decision, action, outcome written atomically — including model name and tokens used. Full replay from any point.</div>
+          <pre class="cb">{"ts":"2026-04-21T05:42:00Z","agent":"ooda",
+ "input":"open spotify","confidence":0.92,
+ "model":"<span class="tok t-model">gemma4:e4b</span>","ctx_used":1240,
+ "action":{"verb":"applescript","script":"..."},
+ "outcome":"success","ghost":true,"ms":380}</pre>
+        </div></li>
+      </ul>
+      <div class="tags">
+        <span class="tag tg">SQLite FTS5</span>
+        <span class="tag tg">Append-only JSONL</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Summary ── -->
+  <div class="phase">
+    <div class="ph" onclick="tog('b6','c6')">
+      <span class="badge" style="background:#F1EFE8;color:#5F5E5A">∑</span>
+      <span class="ptitle">Full stack reference</span>
+      <span class="pmeta">summary</span>
+      <span class="chev" id="c6">▼</span>
+    </div>
+    <div class="pb open" id="b6">
+      <div class="sgrid">
+        <div class="sc2"><div class="sc2-l">Wake word</div><div class="sc2-v">Porcupine (always-on)<br>or Hammerspoon ⌥Space</div></div>
+        <div class="sc2"><div class="sc2-l">STT</div><div class="sc2-v">whisper.cpp (Metal)<br>faster-whisper (container)<br><span class="tok t-whi" style="font-size:11px">base</span> model</div></div>
+        <div class="sc2"><div class="sc2-l">LLM + vision</div><div class="sc2-v">Gemma 4 <span class="tok t-model">e4b</span><br>Ollama — Metal GPU<br><span class="tok t-ctx" style="font-size:11px">8192</span> ctx · <span class="tok t-vis" style="font-size:11px">140</span> vis tok</div></div>
+        <div class="sc2"><div class="sc2-l">UI click — AX</div><div class="sc2-v">AXUIElement (native)<br>label + role lookup</div></div>
+        <div class="sc2"><div class="sc2-l">UI click — fallback</div><div class="sc2-v">Gemma 4 vision → coords<br>pyautogui.click(x,y)</div></div>
+        <div class="sc2"><div class="sc2-l">Window mgmt</div><div class="sc2-v">Hammerspoon (Lua)<br>AppleScript / osascript</div></div>
+        <div class="sc2"><div class="sc2-l">Orchestration</div><div class="sc2-v">Docker container<br>FastAPI + WebSocket</div></div>
+        <div class="sc2"><div class="sc2-l">State</div><div class="sc2-v">Append-only JSONL<br>SQLite FTS5 index</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Device profiles keyed by unified memory tier (GB) ──
+const P = {
+   8: { model:"gemma4:e4b",  ctx:4096,   whi:"tiny",   vis:70,  thr:4,  bat:128,  tier:"a", ramLabel:"8 GB",   note:"w", msg:"Tight. Close other apps before running. Push-to-talk (⌥Space) strongly recommended over always-on wake word." },
+  16: { model:"gemma4:e4b",  ctx:8192,   whi:"base",   vis:140, thr:4,  bat:256,  tier:"g", ramLabel:"16 GB",  note:"i", msg:"Default recommended setup. Smooth multitasking, balanced latency." },
+  24: { model:"gemma4:e4b",  ctx:16384,  whi:"small",  vis:280, thr:6,  bat:512,  tier:"g", ramLabel:"24 GB",  note:"i", msg:"Comfortable headroom. Small whisper model gives noticeably better STT accuracy." },
+  32: { model:"gemma4:26b",  ctx:32768,  whi:"small",  vis:280, thr:8,  bat:512,  tier:"g", ramLabel:"32 GB",  note:"i", msg:"Upgrades to the 26B MoE model — near-27B quality at e4b inference speed due to sparse activation." },
+  48: { model:"gemma4:26b",  ctx:65536,  whi:"medium", vis:560, thr:10, bat:512,  tier:"g", ramLabel:"48 GB",  note:"i", msg:"Large context window enables long document sessions. High-res vision tokens for dense UIs." },
+  64: { model:"gemma4:27b",  ctx:131072, whi:"medium", vis:560, thr:12, bat:1024, tier:"b", ramLabel:"64 GB+", note:"i", msg:"Full 27B dense model. Maximum context (128K). Reserved for M3/M4 Ultra configurations." },
+};
+const TIERS = [8,16,24,32,48,64];
+
+function bestTier(ram) {
+  // Leave ~30% headroom for macOS + background processes
+  const usable = ram * 0.70;
+  let best = 8;
+  for (const t of TIERS) { if (usable >= t) best = t; }
+  return best;
+}
+
+function ctxNote(c) {
+  if (c <= 4096)  return "tight — rotate history";
+  if (c <= 8192)  return "~8 K · good for sessions";
+  if (c <= 16384) return "~16 K · multi-turn";
+  if (c <= 32768) return "~32 K · long docs";
+  return "~64–128 K · large context";
+}
+const W_NOTES = { tiny:"~39 MB · fastest", base:"~74 MB · balanced", small:"~244 MB · accurate", medium:"~769 MB · high accuracy" };
+const V_NOTES = { 70:"~120 ms latency", 140:"~200 ms latency", 280:"~340 ms latency", 560:"~600 ms latency" };
+
+function apply(tier) {
+  const p = P[tier];
+
+  // Recommendation cells
+  setMC("r-model", p.model,                    "ollama pull " + p.model);
+  setMC("r-ctx",   p.ctx.toLocaleString()+" tok", ctxNote(p.ctx));
+  setMC("r-whi",   p.whi,                       W_NOTES[p.whi] || "");
+  setMC("r-vis",   p.vis+" tok",                (V_NOTES[p.vis]||"") + " · UI detection");
+  setMC("r-thr",   p.thr,                       p.thr + " CPU threads");
+  setMC("r-bat",   p.bat,                       "tokens per batch");
+
+  // Update every inline token span in code blocks
+  q(".t-model").forEach(e => e.textContent = p.model);
+  q(".t-ctx").forEach(e => e.textContent = p.ctx.toLocaleString());
+  q(".t-whi").forEach(e => e.textContent = p.whi);
+  q(".t-vis").forEach(e => e.textContent = p.vis);
+  q(".t-thr").forEach(e => e.textContent = p.thr);
+  q(".t-bat").forEach(e => e.textContent = p.bat);
+
+  // Warning / info box
+  const warn = $("d-warn"), info = $("d-info");
+  warn.style.display = "none"; info.style.display = "none";
+  if (p.note === "w") { warn.textContent = "⚠ " + p.msg; warn.style.display = "block"; }
+  else                { info.textContent = "✓ " + p.msg; info.style.display = "block"; }
+}
+
+function setMC(id, val, note) {
+  $( id ).textContent = val;
+  $(id + "-n").textContent = note;
+}
+function $(id) { return document.getElementById(id); }
+function q(sel) { return Array.from(document.querySelectorAll(sel)); }
+
+let autoTier = 16;
+
+function runDetection() {
+  const ram    = navigator.deviceMemory || 4;
+  const cores  = navigator.hardwareConcurrency || 4;
+  const ua     = navigator.userAgent;
+  const isMac  = /Mac/.test(ua);
+  const isSi   = isMac; // all modern Macs are Apple Silicon — best-effort
+
+  // RAM pill (browser caps at 8 GB — treat as lower bound)
+  const pOS = $("p-os");
+  pOS.textContent = isSi ? "Apple Silicon" : isMac ? "Intel Mac" : "Non-Mac";
+  pOS.className = "pill " + (isSi ? "g" : isMac ? "a" : "r");
+
+  const pRAM = $("p-ram");
+  pRAM.textContent = ram + " GB+ RAM";
+  pRAM.className = "pill " + (ram >= 8 ? "g" : "a");
+  pRAM.title = "Browser caps at 8 GB. Use manual override if you have more.";
+
+  const pCores = $("p-cores");
+  pCores.textContent = cores + " cores";
+  pCores.className = "pill x";
+
+  const pGPU = $("p-gpu");
+  pGPU.textContent = isSi ? "Metal GPU" : "No Metal";
+  pGPU.className = "pill " + (isSi ? "b" : "r");
+
+  // Apple Silicon Macs nearly always have ≥16 GB; bias upward from browser 8 GB cap
+  const effective = (isSi && ram <= 8) ? 16 : ram;
+  autoTier = bestTier(effective);
+  apply(autoTier);
+}
+
+function manualOverride(val) {
+  if (!val) { runDetection(); return; }
+  const t = bestTier(parseInt(val));
+  const p = P[t];
+  $("p-ram").textContent = p.ramLabel + " (manual)";
+  $("p-ram").className = "pill " + p.tier;
+  apply(t);
+}
+
+// ── Accordion ──
+const OS = { b0:true, b6:true };
+function tog(id, cid) {
+  OS[id] = !OS[id];
+  $(id).classList.toggle("open", OS[id]);
+  $(cid).style.transform = OS[id] ? "rotate(180deg)" : "";
+}
+
+// ── Init ──
+document.addEventListener("DOMContentLoaded", () => {
+  $("c0").style.transform = "rotate(180deg)";
+  $("c6").style.transform = "rotate(180deg)";
+  runDetection();
+});
+</script>
+</body>
+</html>
